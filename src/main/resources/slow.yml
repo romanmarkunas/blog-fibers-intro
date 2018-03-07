@@ -2,3 +2,13 @@ server:
   applicationConnectors:
   - type: http
     port: 0
+  requestLog:
+    appenders:
+    - type: file
+      archive: false
+      currentLogFilename: logs/access.log
+
+logging:
+  appenders:
+    - type: console
+      threshold: ERROR
