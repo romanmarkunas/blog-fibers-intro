@@ -4,8 +4,19 @@ repositories {
     jcenter()
 }
 
+configurations {
+    quasar
+}
+
 dependencies {
     compile 'io.dropwizard:dropwizard-core:1.2.2'
     testCompile 'junit:junit:4.12'
     testCompile 'io.dropwizard:dropwizard-testing:1.2.2'
+    testCompile 'co.paralleluniverse:comsat-jax-rs-client:0.7.0'
+    testCompile 'co.paralleluniverse:quasar-core:0.7.0'
+    quasar 'co.paralleluniverse:quasar-core:0.7.0'
+}
+
+test {
+    jvmArgs "-javaagent:${configurations.quasar.iterator().next()}"
 }
