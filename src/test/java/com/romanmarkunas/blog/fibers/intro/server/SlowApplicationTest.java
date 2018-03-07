@@ -3,6 +3,8 @@ package com.romanmarkunas.blog.fibers.intro.server;
 import io.dropwizard.Configuration;
 import io.dropwizard.testing.ResourceHelpers;
 import io.dropwizard.testing.junit.DropwizardAppRule;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 
@@ -12,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 public class SlowApplicationTest {
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private ExecutorService executor;
 
 
     @ClassRule
@@ -20,6 +22,12 @@ public class SlowApplicationTest {
             = new DropwizardAppRule<>(
             SlowApplication.class,
             ResourceHelpers.resourceFilePath("slow.yml"));
+
+
+    @Before
+    public void setUp() throws Exception {
+        this.executor = Executors.newFixedThreadPool(2);
+    }
 
 
     @Test
@@ -49,5 +57,18 @@ public class SlowApplicationTest {
         }
         this.executor.shutdown();
         this.executor.awaitTermination(30, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void fibers() throws Exception {
+        
+    }
+
+
+    @After
+    public void tearDown() throws Exception {
+        if (!this.executor.isShutdown()) {
+            this.executor.shutdownNow();
+        }
     }
 }
