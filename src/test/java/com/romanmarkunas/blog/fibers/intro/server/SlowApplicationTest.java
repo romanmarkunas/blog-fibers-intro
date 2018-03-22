@@ -3,6 +3,7 @@ package com.romanmarkunas.blog.fibers.intro.server;
 import co.paralleluniverse.fibers.Fiber;
 import co.paralleluniverse.fibers.FiberExecutorScheduler;
 import co.paralleluniverse.fibers.SuspendExecution;
+import co.paralleluniverse.fibers.Suspendable;
 import co.paralleluniverse.fibers.ws.rs.client.AsyncClientBuilder;
 import io.dropwizard.Configuration;
 import io.dropwizard.testing.ResourceHelpers;
@@ -87,6 +88,7 @@ public class SlowApplicationTest {
     }
 
 
+    @Suspendable
     private void longTask(long baseline, Client client) {
         long start = millisSince(baseline);
 
