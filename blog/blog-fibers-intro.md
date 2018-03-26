@@ -4,7 +4,8 @@ I don't know if it's just me, but every time I see an ExecutorService
 with 400 threads, I have that "it's not ok" feeling. Sometimes I see
 folk plugging multithreading without any reason, but sometimes it's a
 necessary evil, needed to retain application responsive while being
-blocked by downstream.
+blocked by downstream. However in there is another way of achieving
+responsiveness without spinning up expensive OS-level threads.
 
 Let's consider a ["spherical example in vacuum"](TODO insert wiki link
 to spherical cow here) here. BTW, all the code used in this blog-post
@@ -50,6 +51,10 @@ requires simpler setup for embedding app into test), however syntax
 must be obvious to Spring boot users as well. I will not post it here
 because service implementation is out of scope of this post.
 
+## Test setup
+
+Move common part of blocking example here.
+
 ## Blocking example
 
 Let's emulate our calls to our slow service in test suite. To create
@@ -68,7 +73,7 @@ Now let's make our call routine which will be shared between thread and
 coroutine example:
 
 ```java
-@Suspendable
+    @Suspendable
     private void longTask(long baseline, Client client) {
         long start = millisSince(baseline);
 
@@ -94,5 +99,132 @@ coroutine example:
 ```
 
 Here we use Jersey client to make calls to service. Note that we record
-both time when routine started relative to baseline and routine
-execution duration.
+both time when routine started relative to test start time (baseline)
+and routine execution duration. Ignore `@Suspendable` for now, I'll come
+back to it later.
+
+For testing purposes let's use a smaller thread pool of size 2:
+```java
+    @Before
+    public void setUp() {
+        this.executor = Executors.newFixedThreadPool(2);
+    }    `
+```
+
+And call our slow service:
+```java
+    @Test
+    public void threads() throws Exception {
+        long baseline = System.currentTimeMillis();
+        for (int i = 0; i < 10; i++) {
+            this.executor.execute(() ->
+                    longTask(baseline, ClientBuilder.newClient()));
+        }
+        this.executor.shutdown();
+        this.executor.awaitTermination(30, TimeUnit.SECONDS);
+        System.out.println(String.format(
+                "Thread execution took %d ms",
+                System.currentTimeMillis() - baseline));
+    }
+```
+
+If we run this, we get something like:
+```
+Invocation 2 started at 104 and finished within 1831 ms
+Invocation 1 started at 112 and finished within 1828 ms
+Invocation 3 started at 1952 and finished within 1052 ms
+Invocation 4 started at 1946 and finished within 1071 ms
+Invocation 5 started at 3009 and finished within 1116 ms
+...
+```
+
+First 2 long tasks start immediately, because we have 2 threads
+available in pool. However other subsequent tasks cannot start and are
+put into thread pool's queue waiting to be picked up. This way the whole
+execution stops during blocking calls and our application just burns
+CPU cycles doing nothing (but showing 100% utilization).
+
+As mentioned before the natural response may be to increase number of
+threads in pool to have more threads in waiting state and have space
+for new incoming requests to start their execution asap. Let's see how
+this can be managed with coroutines.
+
+## Coroutine example
+
+Coroutine test is a bit more elaborate:
+
+```java
+    @Test
+    public void fibers() throws Exception {
+        long baseline = System.currentTimeMillis();
+        List<Fiber<Void>> fibers = new ArrayList<>();
+        FiberExecutorScheduler scheduler = new FiberExecutorScheduler(
+                "default",
+                this.executor);
+
+        for (int i = 0; i < 10; i++) {
+            Fiber<Void> fiber = new Fiber<Void>(scheduler) {
+                @Override
+                protected Void run() throws SuspendExecution, InterruptedException {
+                    longTask(baseline, AsyncClientBuilder.newClient());
+                    return null;
+                }
+            }.start();
+            fibers.add(fiber);
+        }
+
+        for (Fiber fiber : fibers) {
+            fiber.join(30, TimeUnit.SECONDS);
+        }
+        System.out.println(String.format(
+                "Fiber execution took %d ms",
+                System.currentTimeMillis() - baseline));
+    }
+```
+
+This is due to fact that Quasar library does not have ExecutorService
+analogue for coroutines (called fibers in Quasar). This is somewhat
+logical and I had to put in future collection algorithm to make sure
+fibers have time to finish before test returns. In normal life scenarios
+you would not need to do that, because long running tasks in running not
+on acceptor pool must be solved via `@SuspendAsync` (TODO check name is
+correct). You can see that thread example looks like fiber example less
+Future collection code.
+
+One thing that is different is usage of asynchronous version of
+Jersey client. This is because asynchronous code of some libraries is
+automatically instrumented by Quasar COMSAT package (see below).
+
+Let's run the test via gradle task (see below why) and voila:
+
+```
+Invocation 1 started at 135 and finished within 1209 ms
+Invocation 2 started at 119 and finished within 1226 ms
+Invocation 3 started at 197 and finished within 1152 ms
+Invocation 4 started at 230 and finished within 1155 ms
+Invocation 5 started at 238 and finished within 1147 ms
+...
+```
+
+All invocations start at approximately same time and all finish
+within 1,5 s. As you can see 2 executor threads that we have are not
+blocked by waiting and we could actually manage huge amount of requests
+with small thread pool (ideally same number as CPU cores).
+
+## Conclusion
+
+To wrap it all in one sentence, threads must be used as a mean of
+parallelism, but coroutines as means of multitasking. Java thread is
+directly mapped onto OS thread and is abstraction over hardware
+implementation. It is optimal for high-throughput application to have
+same number of threads as cores, in order to have full parallelism
+and minimal switching. Coroutines allow to use that resource on full
+to avoid CPU being stalled in just waiting for network or file IO.
+
+## Objections?
+
+#### This could be solved by async client only
+
+#### Does this all come for free?
+
+#### Yet another library to learn
