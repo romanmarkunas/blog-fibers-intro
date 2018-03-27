@@ -41,6 +41,9 @@ public class SlowResource {
 In case you are unfamiliar with Jax-RS (let those servlets go, it's
 2018 already!), here's a little description. The class represents a
 group of endpoint located together in `/slow-service` path location.
+These endpoints are directly mapped onto methods of the class using
+`@Path` and method annotations, like `@GET`.
+
 In this example our resource accepts only `GET` requests and when
 having that it just sleeps for 1 second and then returns body containing
 invocation number. That number will be useful later when we will try to
@@ -52,10 +55,6 @@ must be obvious to Spring boot users as well. I will not post it here
 because service implementation is out of scope of this post.
 
 ## Test setup
-
-Move common part of blocking example here.
-
-## Blocking example
 
 Let's emulate our calls to our slow service in test suite. To create
 embedded server for test we can use handy Dropwizard rule:
@@ -110,6 +109,8 @@ For testing purposes let's use a smaller thread pool of size 2:
         this.executor = Executors.newFixedThreadPool(2);
     }    `
 ```
+
+## Blocking example
 
 And call our slow service:
 ```java
@@ -223,8 +224,60 @@ to avoid CPU being stalled in just waiting for network or file IO.
 
 ## Objections?
 
-#### This could be solved by async client only
+#### This could be solved by async client only!
+
+True, however when we have more code than this simple test and if we
+have multiple blocking calls during one operation, code becomes highly
+nested (see [callback hell](TODO link) and [triangle of doom](TODO link)).
+During debugging unclear path of execution an obscure stack traces may
+be very confusing and counter productive. Coroutines allow to maintain
+sequential logic of execution, while still executing in parallel.
+
+#### Yet another library to learn
+
+True. I will completely agree that for many applications
+there is no huge performance requirements and spinning 500 blocked
+threads is a viable solution. All new libraries must be justified to be
+used and no performance optimizations must be done without defined
+performance requirements and only after application logic is complete.
+However, once you need performance, using coroutines is crucial as it
+is first optimization level (IO-bound optimizations).
 
 #### Does this all come for free?
 
-#### Yet another library to learn
+Unfortunately no. This quick blog post does not highlight some
+important details needed in order for example code to work. All this
+is due to Java not having built-in language support for coroutines.
+
+First, in order for coroutines to work the resulting Java bytecode must
+be instrumented (changed). This is why if you try to launch tests
+directly via IntelliJ IDEA, Eclipse or other JUnit runner you will get
+```
+TODO insert error message here
+```
+
+Not this line in gradle `test` task:
+```
+jvmArgs "-javaagent:${configurations.quasar.iterator().next()}"
+```
+
+This adds javaagent argument to JVM launch line (more on java agents see
+[here](TODO link)). Here is very brief explanation of what it does.
+During class loading (TODO research and clarify this) agent will scan
+classes and bytecode of all methods that have `@Suspended` annotation
+or have `throws SuspendedException` in their signature will be modified
+to allow saving stack into memory and suspend execution during specific
+calls.
+
+This means that there is some negative consequence:
+1) negligible overhead during classloading
+1) developers must be careful to put all method signatures correctly
+1) it creates connection between how code is written and launched
+1) if you are using existing library to perform IO it may not have
+methods correctly annotated. In this example I used jersey async client
+library which already has modified fiber-friendly version imported via:
+```
+testCompile 'co.paralleluniverse:comsat-jax-rs-client:0.7.0'
+```
+If it's not the case you may need to create our own modification of
+library to be used together with fibers.
