@@ -253,10 +253,12 @@ First, in order for coroutines to work the resulting Java bytecode must
 be instrumented (changed). This is why if you try to launch tests
 directly via IntelliJ IDEA, Eclipse or other JUnit runner you will get
 ```
-TODO insert error message here
+java.lang.IllegalArgumentException: Fiber class
+com.romanmarkunas.blog.fibers.intro.server.SlowApplicationTest$1 has
+not been instrumented.
 ```
 
-Not this line in gradle `test` task:
+Note this line in gradle `test` task:
 ```
 jvmArgs "-javaagent:${configurations.quasar.iterator().next()}"
 ```
@@ -270,7 +272,7 @@ to allow saving stack into memory and suspend execution during specific
 calls.
 
 This means that there is some negative consequence:
-1) negligible overhead during classloading
+1) overhead during classloading
 1) developers must be careful to put all method signatures correctly
 1) it creates connection between how code is written and launched
 1) if you are using existing library to perform IO it may not have
