@@ -2,8 +2,8 @@
 
 Every time I see an ExecutorService with 400 threads, I have that "it's
 not ok" feeling (high-five anyone?). This is usually introduced as
-necessary evil to retain application responsive while being blocked by
-downstream. However there is another way of achieving responsiveness
+necessary evil to retain application responsiveness while being blocked
+by downstream. However there is another way of achieving responsiveness
 without spinning up expensive OS-level threads.
 
 Let's consider a ["spherical example in vacuum"](
