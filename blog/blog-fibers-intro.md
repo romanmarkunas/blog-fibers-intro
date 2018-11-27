@@ -1,14 +1,12 @@
 # Introduction to Java coroutines
 
-Many time I find an ExecutorService with 400 threads in Java code and it leaves This is usually introduced as necessary evil to retain application responsiveness while being blocked by downstream. However there is another way of achieving responsiveness without spinning up expensive OS-level threads.
+Many time I find an ExecutorService with 400 threads in Java code and it leaves This is usually introduced as necessary evil to retain application responsiveness while being blocked by downstream. However there is another way of achieving responsiveness, which is couroutines (alternatively known also as green threads and non-blocking threads in another languages). Java doesn't support support coroutines on language level, so for this example we will use almost exclusive Java implementation of coroutines - Quasar.
 
 Let's consider a ["spherical example in vacuum"](https://en.wikipedia.org/wiki/Spherical_cow) here. BTW, all code can be found [here](https://github.com/romanmarkunas/blog-fibers-intro).
 
-## Slow service for testing purposes
+## Slow blocking service for testing purposes
 
-Suppose we have microservice architecture application where service A must query service B before it can respond to customer, e.g. Navigation service providing some path between 2 locations and depending on Traffic service which collects data on current traffic congestion.
-
-We can emulate that Traffic service with contrived Jersey resource:
+Suppose we have microservice architecture application where service A must query service B before it can respond (alternatively it could be a task in background, which execution completion must be constantly monitored). We can emulate that slow service with contrived Jersey resource:
 
 ```java
 @Path(SlowResource.PATH)
@@ -26,15 +24,14 @@ public class SlowResource {
 }
 ```
 
-If you are unfamiliar with JAX-RS (let those servlets go, it's 2018), [here](https://jersey.github.io/documentation/latest/jaxrs-resources.html) is a little description.
+If you are unfamiliar with JAX-RS (let those servlets go, it's 2018), [here](https://jersey.github.io/documentation/latest/jaxrs-resources.html) is a little description. Also, I'll use Dropwizard framework to create a service, however syntax must be obvious to Spring boot or any other Java http library users as well. I will not post it here because service implementation is out of scope of this post.
 
-This resource accepts `GET` requests and having that it sleeps for 1 second and then returns body containing invocation number. That number will be useful later to visualize what happened during test runs.
+This resource accepts `GET` requests and having that it sleeps for 1 second and then returns body containing invocation number. That number will be useful later on to visualize what happened during test runs.
 
-I'll use Dropwizard framework to create a service (mainly because it requires simpler setup for embedding app into test), however syntax must be obvious to Spring boot users as well. I will not post it here because service implementation is out of scope of this post.
 
-## Test setup
+## Test setup for thread and coroutine examples
 
-Let's emulate our calls to our slow service in test suite. Following handy Dropwizard rule will create a fresh embedded server for each test:
+Let's emulate our calls to our slow service in test suite. Following handy Dropwizard rule will create a fresh embedded server with blocking resource for each test:
 
 ```java
 @Rule
@@ -81,7 +78,7 @@ public void setUp() {
 }    `
 ```
 
-## Blocking example
+## Blocking example with Java executor
 
 ```java
 @Test
@@ -114,7 +111,7 @@ First 2 long tasks start immediately, since we have 2 threads available in pool.
 
 As mentioned before the natural response may be to increase number of threads in pool to have more threads in waiting state and have space for new incoming requests to start their execution ASAP. Let's see how this can be managed with coroutines.
 
-## Coroutine example
+## Non-blocking example using Quasar coroutines
 
 Coroutine test is a bit more elaborate:
 
@@ -147,9 +144,11 @@ public void fibers() throws Exception {
 }
 ```
 
-This is due to fact that Quasar library does not have ExecutorService analogue for coroutines (called fibers in Quasar). This is somewhat logical and I had to put in future collection algorithm to make sure fibers will finish before test returns. In real-life scenarios you would not need to do that, because long running tasks idiomatically must be solved via `@AsyncResponse`. Codewise, thread example looks like fiber one less `Future` collection code.
+This is due to fact that Quasar library does not have ExecutorService analogue for coroutines (called fibers in Quasar). This is somewhat logical and I had to put in future collection algorithm to make sure fibers will finish before test returns. In real-life scenarios you would not need to do that, because long running tasks idiomatically must be handled via `@AsyncResponse` in Java web services. Codewise, thread example looks like fiber one less `Future` collection code.
 
 One thing that is different is usage of asynchronous version of Jersey client. This is because asynchronous code of some libraries is automatically instrumented by Quasar COMSAT package (see below).
+
+Please note that `FiberExecutorScheduler` uses same 2-thread executor to run tasks as in previous blocking thread example.
 
 Let's run the test via gradle task (see below why) and voila:
 
@@ -163,7 +162,7 @@ Invocation 5 started at 238 and finished within 1147 ms
 Fiber execution took 1661 ms
 ```
 
-All invocations started at approximately same time and finished within 2 s. Int his case threads are not blocked by waiting and we could actually manage huge amount of requests with little threads (generally same size as number of CPU cores).
+All invocations started at approximately same time and finished within 2 s. In this case threads are not blocked by waiting and we could actually manage huge amount of requests with little threads (generally same size as number of CPU cores).
 
 ## Conclusion
 
@@ -185,9 +184,9 @@ All new libraries must be justified to be used and no performance optimizations 
 
 #### Does this all come for free?
 
-Unfortunately no. This quick blog post does not highlight some important details needed in order for example code to work. Since Java does not have language support for coroutines, some joggling is needed.
+Unfortunately no. This quick blog post does not highlight some important details needed in order for example code to work. Since Java does not have language support for coroutines, some joggling is needed to successfully utilize Quasar coroutines.
 
-First, in order for coroutines to work compiled Java bytecode must be instrumented (changed). This is why if you try to launch tests directly via IntelliJ IDEA, Eclipse or other JUnit runner you will get
+First, in order for coroutines to work compiled Java bytecode must be instrumented (changed). This is why if you try to launch tests directly via IDE or other JUnit runner you will get
 ```
 java.lang.IllegalArgumentException: Fiber class
 com.romanmarkunas.blog.fibers.intro.server.SlowApplicationTest$1 has
