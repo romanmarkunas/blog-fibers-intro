@@ -1,6 +1,6 @@
 # Introduction to Java coroutines
 
-Many time I find an ExecutorService with 400 threads in Java code and it leaves This is usually introduced as necessary evil to retain application responsiveness while being blocked by downstream. However there is another way of achieving responsiveness, which is couroutines (alternatively known also as green threads and non-blocking threads in another languages). Java doesn't support support coroutines on language level, so for this example we will use almost exclusive Java implementation of coroutines - Quasar.
+Many times I find an ExecutorService with 400 threads in Java code and I always got that's-not-ok feeling of that. This is usually introduced as necessary evil to retain application responsiveness while being blocked by downstream. However there is another way of achieving responsiveness, which is couroutines (alternatively known also as green threads and non-blocking threads in another languages). Java doesn't support coroutines at language level, so for this example we will use almost exclusive Java implementation of coroutines - Quasar.
 
 Let's consider a ["spherical example in vacuum"](https://en.wikipedia.org/wiki/Spherical_cow) here. BTW, all code can be found [here](https://github.com/romanmarkunas/blog-fibers-intro).
 
@@ -111,7 +111,7 @@ First 2 long tasks start immediately, since we have 2 threads available in pool.
 
 As mentioned before the natural response may be to increase number of threads in pool to have more threads in waiting state and have space for new incoming requests to start their execution ASAP. Let's see how this can be managed with coroutines.
 
-## Non-blocking example using Quasar coroutines
+## Non-blocking Quasar coroutines
 
 Coroutine test is a bit more elaborate:
 
