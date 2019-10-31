@@ -4,6 +4,7 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 
+// [slowResource start]
 @Path(SlowResource.PATH)
 public class SlowResource {
 
@@ -17,3 +18,4 @@ public class SlowResource {
         return this.counter.incrementAndGet();
     }
 }
+// [slowResource end]
