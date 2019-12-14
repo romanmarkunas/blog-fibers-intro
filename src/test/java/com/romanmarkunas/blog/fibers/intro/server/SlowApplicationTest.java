@@ -29,7 +29,8 @@ public class SlowApplicationTest {
     @Rule
     public DropwizardAppRule<Configuration> app = new DropwizardAppRule<>(
             SlowApplication.class,
-            ResourceHelpers.resourceFilePath("slow.yml"));
+            ResourceHelpers.resourceFilePath("slow.yml")
+    );
 
 
     @Before
@@ -49,7 +50,8 @@ public class SlowApplicationTest {
         this.executor.awaitTermination(30, TimeUnit.SECONDS);
         System.out.println(String.format(
                 "Thread execution took %d ms",
-                System.currentTimeMillis() - baseline));
+                System.currentTimeMillis() - baseline)
+        );
     }
 
     @Test
